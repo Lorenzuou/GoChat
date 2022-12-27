@@ -1,0 +1,32 @@
+<html>
+	<head>
+		<link rel="stylesheet" href="style.css" />
+		
+		<title>Chat</title>
+	</head>
+	<body>
+		<div id="messages"></div>
+		<form id="form">
+			<input id="input" type="text" autocomplete="off" />
+			<button type="submit">Send</button>
+		</form>
+	</body>
+	<script>
+		const socket = new WebSocket("ws://localhost:8080/");
+		const form = document.getElementById("form");
+		const input = document.getElementById("input");
+		const messages = document.getElementById("messages");
+
+		form.addEventListener("submit", (event) => {
+			event.preventDefault();
+			socket.send(input.value);
+			input.value = "";
+		});
+
+		socket.addEventListener("message", (event) => {
+			const message = document.createElement("div");
+			message.innerText = event.data;
+			messages.appendChild(message);
+		});
+	</script>
+</html>
