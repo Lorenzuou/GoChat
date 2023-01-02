@@ -12,13 +12,14 @@
 		</form>
 	</body>
 	<script>
-		const socket = new WebSocket("ws://localhost:8080/");
+		const socket = new WebSocket("ws://localhost:8080/ws");
 		const form = document.getElementById("form");
 		const input = document.getElementById("input");
 		const messages = document.getElementById("messages");
 
 		form.addEventListener("submit", (event) => {
 			event.preventDefault();
+			console.log(input.value);
 			socket.send(input.value);
 			input.value = "";
 		});
@@ -27,6 +28,7 @@
 			const message = document.createElement("div");
 			message.innerText = event.data;
 			messages.appendChild(message);
+			console.log(event.data);
 		});
 	</script>
 </html>

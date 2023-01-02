@@ -1,23 +1,23 @@
 package main
 
 import (
-	"bufio"
+	"log"
 	"fmt"
-	"net"
+	"net/http"
+
+	"github.com/gorilla/websocket"
 )
 
 // Client represents a connected client
 type Client struct {
-	Name   string
-	Reader *bufio.Reader
-	Writer *bufio.Writer
+	Name string
+	Conn *websocket.Conn
 }
 
 // Send broadcasts a message to all clients
 func (c *Client) Send(message string) {
 	for _, client := range clients {
-		client.Writer.WriteString(fmt.Sprintf("%s: %s\n", c.Name, message))
-		client.Writer.Flush()
+		client.Conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("%s: %s", c.Name, message)))
 	}
 }
 
@@ -28,40 +28,50 @@ var (
 	messages  = make(chan string)
 )
 
+var upgrader = &websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
+}
+
 func main() {
-	listener, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		panic(err)
-	}
-	defer listener.Close()
+	router := http.NewServeMux()
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "index.html")
+	})
 
-	fmt.Println("Server started, listening on port 8080")
+	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("New client connected")
+		conn, _ := upgrader.Upgrade(w, r, nil)
+		// if err != nil {
+		// 	fmt.Println("Error upgrading connection %v", err)
+		// 	log.Println(err)
+		// 	return 
+		// }
 
-	// Start a Goroutine to handle client connections
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				continue
-			}
-			client := &Client{
-				Reader: bufio.NewReader(conn),
-				Writer: bufio.NewWriter(conn),
-			}
-			addClient <- client
-			go func() {
-				for {
-					line, _, err := client.Reader.ReadLine()
-					if err != nil {
-						delClient <- client
-						return
-					}
-					messages <- string(line)
+		client := &Client{Conn: conn}
+		addClient <- client
+		fmt.Println("Client added")
+		go func() {
+			for {
+				_, message, err := conn.ReadMessage()
+				fmt.Println("Message received")
+				fmt.Println(string(message))
+				if err != nil {
+					delClient <- client
+					return
 				}
-			}()
-		}
-	}()
+				messages <- string(message)
+			}
+		}()
+	})
+	fmt.Println("Listening on port 8080")
+	log.Fatal(http.ListenAndServe("localhost:8080", router))
 
+	// router.ListenAndServe(":8080", nil)
+}
+
+func handleClients() {
 	for {
 		select {
 		case client := <-addClient:
