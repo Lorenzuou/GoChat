@@ -1,94 +1,103 @@
 package main
 
 import (
+	// "bufio"
+	// "fmt"
 	"log"
-	"fmt"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 )
 
-// Client represents a connected client
-type Client struct {
-	Name string
-	Conn *websocket.Conn
+var clients = make(map[*websocket.Conn]bool) // connected clients
+var broadcast = make(chan Message)           // broadcast channel
+
+// Message defines the structure of a chat message
+type Message struct {
+	Username string `json:"username"`
+	Message  string `json:"message"`
 }
 
-// Send broadcasts a message to all clients
-func (c *Client) Send(message string) {
-	for _, client := range clients {
-		client.Conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("%s: %s", c.Name, message)))
-	}
-}
+var messages []Message
 
-var (
-	clients   []*Client
-	addClient = make(chan *Client)
-	delClient = make(chan *Client)
-	messages  = make(chan string)
-)
 
-var upgrader = &websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+// Configure the upgrader
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 func main() {
-	router := http.NewServeMux()
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "index.html")
-	})
+	// Create a simple file server
+	fs := http.FileServer(http.Dir("."))
+	http.Handle("/", fs)
 
-	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("New client connected")
-		conn, _ := upgrader.Upgrade(w, r, nil)
-		// if err != nil {
-		// 	fmt.Println("Error upgrading connection %v", err)
-		// 	log.Println(err)
-		// 	return 
-		// }
+	// Configure websocket route
+	http.HandleFunc("/ws", handleConnections)
 
-		client := &Client{Conn: conn}
-		addClient <- client
-		fmt.Println("Client added")
-		go func() {
-			for {
-				_, message, err := conn.ReadMessage()
-				fmt.Println("Message received")
-				fmt.Println(string(message))
-				if err != nil {
-					delClient <- client
-					return
-				}
-				messages <- string(message)
-			}
-		}()
-	})
-	fmt.Println("Listening on port 8080")
-	log.Fatal(http.ListenAndServe("localhost:8080", router))
+	// Start listening for incoming chat messages
+	go handleMessages()
 
-	// router.ListenAndServe(":8080", nil)
+	// Start the server on localhost port 8000 and log any errors
+	log.Println("http server started on :8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }
 
-func handleClients() {
+func handleConnections(w http.ResponseWriter, r *http.Request) {
+	// Upgrade initial GET request to a websocket
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Make sure we close the connection when the function returns
+	defer ws.Close()
+
+	// Register new client
+	clients[ws] = true
+
+	// Send last 10 messages to new client 
+	for _, msg := range messages {
+		err := ws.WriteJSON(msg)
+		if err != nil {
+			log.Printf("error: %v", err)
+			ws.Close()
+			delete(clients, ws)
+		} 
+	}
+
 	for {
-		select {
-		case client := <-addClient:
-			clients = append(clients, client)
-			client.Name = fmt.Sprintf("User %d", len(clients))
-			client.Send("Welcome to the chat!")
-		case client := <-delClient:
-			for i, c := range clients {
-				if c == client {
-					clients = append(clients[:i], clients[i+1:]...)
-					break
-				}
-			}
-			client.Send("Goodbye!")
-		case message := <-messages:
-			for _, client := range clients {
-				client.Send(message)
+		var msg Message
+		// Read in a new message as JSON and map it to a Message object
+		err := ws.ReadJSON(&msg)
+		if err != nil {
+			log.Printf("error: %v", err)
+			delete(clients, ws)
+			break
+		}
+		// Send the newly received message to the broadcast channel
+		broadcast <- msg
+	}
+}
+
+func handleMessages() {
+	for {
+		// Grab the next message from the broadcast channel
+		msg := <-broadcast
+		//append to messages 
+		messages = append(messages, msg)
+
+
+		// Send it out to every client that is currently connected
+		for client := range clients {
+			err := client.WriteJSON(msg)
+			if err != nil {
+				log.Printf("error: %v", err)
+				client.Close()
+				delete(clients, client)
 			}
 		}
 	}

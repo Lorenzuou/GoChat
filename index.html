@@ -12,21 +12,32 @@
 		</form>
 	</body>
 	<script>
+		
+
 		const socket = new WebSocket("ws://localhost:8080/ws");
 		const form = document.getElementById("form");
 		const input = document.getElementById("input");
 		const messages = document.getElementById("messages");
 
+		const user = prompt("Enter your name");
+	
+
 		form.addEventListener("submit", (event) => {
 			event.preventDefault();
-			console.log(input.value);
-			socket.send(input.value);
+			//create a json object to send to the server, it has "username" and "message" field
+			var obj = {
+				username: user,
+				message: input.value
+			};
+
+
+			socket.send(JSON.stringify(obj));
 			input.value = "";
 		});
 
 		socket.addEventListener("message", (event) => {
 			const message = document.createElement("div");
-			message.innerText = event.data;
+			message.innerText = JSON.parse(event.data).username + ": " + JSON.parse(event.data).message;
 			messages.appendChild(message);
 			console.log(event.data);
 		});
