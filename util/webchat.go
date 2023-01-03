@@ -1,4 +1,4 @@
-package main
+package webchat
 
 import (
 	// "bufio"
@@ -20,7 +20,6 @@ type Message struct {
 
 var messages []Message
 
-
 // Configure the upgrader
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -28,26 +27,48 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func main() {
-	// Create a simple file server
-	fs := http.FileServer(http.Dir("."))
-	http.Handle("/", fs)
+// func main() {
+// 	// Create a simple file server
+// 	fs := http.FileServer(http.Dir("./public"))
+// 	fmt.Println("fs: ", fs)
+// 	http.Handle("/", fs)
 
-	// Configure websocket route
-	http.HandleFunc("/ws", handleConnections)
+// 	// Configure websocket route
+// 	http.HandleFunc("/ws", handleConnections)
 
-	// Start listening for incoming chat messages
-	go handleMessages()
+// 	// Start listening for incoming chat messages
+// 	go handleMessages()
 
-	// Start the server on localhost port 8000 and log any errors
-	log.Println("http server started on :8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
+// 	// Start the server on localhost port 8000 and log any errors
+// 	log.Println("http server started on :8080")
+// 	err := http.ListenAndServe(":8080", nil)
+// 	if err != nil {
+// 		log.Fatal("ListenAndServe: ", err)
+// 	}
+// }
+
+func HandleMessages() {
+	for {
+		// Grab the next message from the broadcast channel
+		msg := <-broadcast
+		//append to messages
+		messages = append(messages, msg)
+
+		// Send it out to every client that is currently connected
+		for client := range clients {
+			err := client.WriteJSON(msg)
+			if err != nil {
+				log.Printf("error: %v", err)
+				client.Close()
+				delete(clients, client)
+			}
+		}
 	}
 }
 
-func handleConnections(w http.ResponseWriter, r *http.Request) {
+func HandleConnections(w http.ResponseWriter, r *http.Request) {
+
+	go HandleMessages()
 	// Upgrade initial GET request to a websocket
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -59,14 +80,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	// Register new client
 	clients[ws] = true
 
-	// Send last 10 messages to new client 
+	// Send last 10 messages to new client
 	for _, msg := range messages {
 		err := ws.WriteJSON(msg)
 		if err != nil {
 			log.Printf("error: %v", err)
 			ws.Close()
 			delete(clients, ws)
-		} 
+		}
 	}
 
 	for {
@@ -80,25 +101,5 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 		// Send the newly received message to the broadcast channel
 		broadcast <- msg
-	}
-}
-
-func handleMessages() {
-	for {
-		// Grab the next message from the broadcast channel
-		msg := <-broadcast
-		//append to messages 
-		messages = append(messages, msg)
-
-
-		// Send it out to every client that is currently connected
-		for client := range clients {
-			err := client.WriteJSON(msg)
-			if err != nil {
-				log.Printf("error: %v", err)
-				client.Close()
-				delete(clients, client)
-			}
-		}
 	}
 }
