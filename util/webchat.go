@@ -1,4 +1,4 @@
-package webchat
+package rooms
 
 import (
 	// "bufio"
@@ -16,6 +16,7 @@ var broadcast = make(chan Message)           // broadcast channel
 type Message struct {
 	Username string `json:"username"`
 	Message  string `json:"message"`
+	RoomId   string `json:"roomid"`
 }
 
 var messages []Message
@@ -26,26 +27,6 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 }
-
-// func main() {
-// 	// Create a simple file server
-// 	fs := http.FileServer(http.Dir("./public"))
-// 	fmt.Println("fs: ", fs)
-// 	http.Handle("/", fs)
-
-// 	// Configure websocket route
-// 	http.HandleFunc("/ws", handleConnections)
-
-// 	// Start listening for incoming chat messages
-// 	go handleMessages()
-
-// 	// Start the server on localhost port 8000 and log any errors
-// 	log.Println("http server started on :8080")
-// 	err := http.ListenAndServe(":8080", nil)
-// 	if err != nil {
-// 		log.Fatal("ListenAndServe: ", err)
-// 	}
-// }
 
 func HandleMessages() {
 	for {
@@ -68,7 +49,6 @@ func HandleMessages() {
 
 func HandleConnections(w http.ResponseWriter, r *http.Request) {
 
-	go HandleMessages()
 	// Upgrade initial GET request to a websocket
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -77,18 +57,21 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 	// Make sure we close the connection when the function returns
 	defer ws.Close()
 
+	//get room id from
+
 	// Register new client
 	clients[ws] = true
-
-	// Send last 10 messages to new client
-	for _, msg := range messages {
-		err := ws.WriteJSON(msg)
-		if err != nil {
-			log.Printf("error: %v", err)
-			ws.Close()
-			delete(clients, ws)
+	go func() {
+		// Send last 10 messages to new client
+		for _, msg := range messages {
+			err := ws.WriteJSON(msg)
+			if err != nil {
+				log.Printf("error: %v", err)
+				ws.Close()
+				delete(clients, ws)
+			}
 		}
-	}
+	}()
 
 	for {
 		var msg Message
@@ -103,3 +86,5 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		broadcast <- msg
 	}
 }
+
+// adapt handleConnections to handle multiple rooms

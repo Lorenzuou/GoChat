@@ -1,0 +1,46 @@
+<html>
+	<head>
+		<link rel="stylesheet" href="public/css/style.css" />
+		
+		<title>Sala: {{.}}</title>
+	</head>
+	<body>
+		<div id="messages"></div>
+		<form id="form">
+			<input id="input" type="text" autocomplete="off" />
+			<button type="submit">Send</button>
+		</form>
+	</body>
+	<script>
+		
+
+		const socket = new WebSocket("ws://localhost:8080/ws/{{.}}");
+		const form = document.getElementById("form");
+		const input = document.getElementById("input");
+		const messages = document.getElementById("messages");
+
+		const user = prompt("Enter your name");
+	
+
+		form.addEventListener("submit", (event) => {
+			event.preventDefault();
+			//create a json object to send to the server, it has "username" and "message" field
+			var obj = {
+				Username: user,
+				Message: input.value, 
+				RoomId: "{{.}}"
+			};
+
+
+			socket.send(JSON.stringify(obj));
+			input.value = "";
+		});
+
+		socket.addEventListener("message", (event) => {
+			const message = document.createElement("div");
+			message.innerText = JSON.parse(event.data).Username + ": " + JSON.parse(event.data).Message;
+			messages.appendChild(message);
+			console.log(event.data);
+		});
+	</script>
+</html>
