@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -25,7 +24,7 @@ func mapRoutesWithParams() {
 
 }
 
-var rooms = rm.NewRoomManager()
+var rooms = rm.GetRooms()
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	t, _ := template.ParseFiles("public/index.html")
@@ -34,35 +33,39 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func roomsPage(w http.ResponseWriter, r *http.Request) {
+
+	roomsIds := rm.GetRomsIds()
+
 	t, _ := template.ParseFiles("public/rooms.gohtml")
-	t.Execute(w, nil)
+	t.Execute(w, roomsIds)
 
 }
 
 func createRoom(w http.ResponseWriter, r *http.Request) {
 
-	room := rooms.CreateRoom()
+	room := rm.CreateRoom()
 	fmt.Println("room id: ", room.GetId())
-	go room.Run()
-	fmt.Println("room created")
 	//send client to room with id as query param
 	http.Redirect(w, r, "/room?id="+room.GetId(), http.StatusSeeOther)
 
 }
 
-func roomPage(w http.ResponseWriter, r *http.Request, params ...string) {
+func roomPage(w http.ResponseWriter, r *http.Request, params map[string]string) {
 
-	// if rooms.GetRoom(id) == nil {
-	// 	http.Redirect(w, r, "/rooms", http.StatusSeeOther)
-	// }
+	id := params["id"]
+	if rm.GetRoomById(id) == nil {
+		http.Redirect(w, r, "/rooms", http.StatusSeeOther)
+	} else {
 
-	// t, _ := template.ParseFiles("public/room.gohtml")
-	// t.Execute(w, id)
+		t, _ := template.ParseFiles("public/room.gohtml")
+		t.Execute(w, id)
+	}
 
 }
 
-func wsEndpoint(w http.ResponseWriter, r *http.Request, params ...string) {
-	fmt.Println("wsEndpoint")
+func wsEndpoint(w http.ResponseWriter, r *http.Request, params map[string]string) {
+	id := params["id"]
+	rm.HandleConnections(w, r, id)
 }
 
 // func wsEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +80,7 @@ func wsEndpoint(w http.ResponseWriter, r *http.Request, params ...string) {
 
 // maps routes to functions
 var mux map[string]func(http.ResponseWriter, *http.Request)
-var muxP map[string]func(http.ResponseWriter, *http.Request, ...string)
+var muxP map[string]func(http.ResponseWriter, *http.Request, map[string]string)
 
 func main() {
 	fmt.Println("Web Chat usando Golang v0.01")
@@ -88,10 +91,12 @@ func main() {
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
-	http.Handle("/public/", http.StripPrefix("/public/", http.FileServer(http.Dir("public"))))
+
+	fs := http.FileServer(http.Dir("public"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	mux = make(map[string]func(http.ResponseWriter, *http.Request))
-	muxP = make(map[string]func(http.ResponseWriter, *http.Request, ...string))
+	muxP = make(map[string]func(http.ResponseWriter, *http.Request, map[string]string))
 	mapRoutes()
 	mapRoutesWithParams()
 
@@ -102,14 +107,16 @@ func main() {
 
 }
 
-func treatParameters(url string) string {
-	params := strings.Split(url, "?")
-	paramslist := strings.Split(params[1], "&")
-	//map each parameter to a map
-	fmt.Println(paramslist)
-	os.Exit(1)
-	return params[1]
+func treatParameters(url string) map[string]string {
+	//get all the parameters and return it as a map of string
 
+	paramsList := strings.Split(url, "&")
+	params := make(map[string]string)
+	for _, param := range paramsList {
+		paramList := strings.Split(param, "=")
+		params[paramList[0]] = paramList[1]
+	}
+	return params
 }
 
 type myHandler struct{}
@@ -118,10 +125,12 @@ func (*myHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	params := strings.Split(r.URL.String(), "?")
 	if h, ok := mux[params[0]]; ok {
+
 		h(w, r)
 		return
 	} else if h, ok := muxP[params[0]]; ok {
 		h(w, r, treatParameters(params[1]))
+
 		return
 	}
 

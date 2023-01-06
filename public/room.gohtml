@@ -1,6 +1,6 @@
 <html>
 	<head>
-		<link rel="stylesheet" href="public/css/style.css" />
+		<link rel="stylesheet" href="/static/css/style.css" />
 		
 		<title>Sala: {{.}}</title>
 	</head>
@@ -14,7 +14,7 @@
 	<script>
 		
 
-		const socket = new WebSocket("ws://localhost:8080/ws/{{.}}");
+		const socket = new WebSocket("ws://localhost:8080/ws?id={{.}}");
 		const form = document.getElementById("form");
 		const input = document.getElementById("input");
 		const messages = document.getElementById("messages");
@@ -40,7 +40,6 @@
 			const message = document.createElement("div");
 			message.innerText = JSON.parse(event.data).Username + ": " + JSON.parse(event.data).Message;
 			messages.appendChild(message);
-			console.log(event.data);
 		});
 	</script>
 </html>

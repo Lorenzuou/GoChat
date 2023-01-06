@@ -13,16 +13,24 @@ type Client struct {
 	conn *websocket.Conn
 
 	// Buffered channel of outbound messages.
-	send chan []byte
+	send chan *Message
 }
 
 // NewClient creates a new client
-func createClient(conn *websocket.Conn) *Client {
+func CreateClient(conn *websocket.Conn) *Client {
 	return &Client{
 
 		conn: conn,
-		send: make(chan []byte, 256),
+		send: make(chan *Message),
 	}
+}
+
+func (c *Client) Leave(room *Room) {
+	room.leave <- c
+}
+
+func (c *Client) GetConn() *websocket.Conn {
+	return c.conn
 }
 
 // Room represents a chat room
@@ -33,42 +41,50 @@ type Room struct {
 	clients map[*Client]bool
 
 	// Inbound messages from the clients.
-	broadcast chan []byte
+	broadcast chan *Message
 
 	// Register requests from the clients.
-	register chan *Client
+	join chan *Client
 
-	// Unregister requests from clients.
-	unregister chan *Client
+	// leave requests from clients.
+	leave chan *Client
+
+	//Check if room is running
+	isrunning bool
 }
 
-type RoomManager struct {
-	rooms map[string]*Room
+// List of rooms
+var rmms = map[string]*Room{}
+
+func GetRooms() map[string]*Room {
+	return rmms
 }
 
-func (rm *RoomManager) GetRoom(id string) *Room {
-	return rm.rooms[id]
-}
-
-func NewRoomManager() *RoomManager {
-	return &RoomManager{
-		rooms: make(map[string]*Room),
+func GetRomsIds() []string {
+	var ids []string
+	for id := range rmms {
+		ids = append(ids, id)
 	}
+	return ids
+}
 
+func GetRoomById(id string) *Room {
+	return rmms[id]
 }
 
 // NewRoom creates a new room
-func (rms *RoomManager) CreateRoom() *Room {
-	id := len(rms.rooms) + 1
+func CreateRoom() *Room {
+	id := len(rmms) + 1
 
 	r := &Room{
-		id:         fmt.Sprintf("%d", id),
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+		id:        fmt.Sprintf("%d", id),
+		broadcast: make(chan *Message),
+		join:      make(chan *Client),
+		leave:     make(chan *Client),
+		clients:   make(map[*Client]bool),
+		isrunning: false,
 	}
-	rms.rooms[r.id] = r
+	rmms[r.id] = r
 	return r
 }
 
@@ -76,31 +92,41 @@ func (rms *RoomManager) CreateRoom() *Room {
 func (ro *Room) Run() {
 	for {
 		select {
-		case client := <-ro.register:
+		case client := <-ro.join:
 			ro.clients[client] = true
-		case client := <-ro.unregister:
+		case client := <-ro.leave:
 			if _, ok := ro.clients[client]; ok {
 				delete(ro.clients, client)
 				close(client.send)
 			}
 		case message := <-ro.broadcast:
 			for client := range ro.clients {
-				select {
-				case client.send <- message:
-				default:
-					close(client.send)
-					delete(ro.clients, client)
-				}
+
+				sendMessage(message, client.GetConn())
 			}
 		}
 	}
 }
+
 func (ro *Room) GetClients() map[*Client]bool {
 	return ro.clients
 }
 
-func (ro *Room) updateBroadcast(message []byte) {
+func (ro *Room) updateBroadcast(message *Message) {
 	ro.broadcast <- message
+	return
+}
+
+func (ro *Room) SetStatus(status bool) {
+	ro.isrunning = status
+}
+
+func (ro *Room) GetStatus() bool {
+	return ro.isrunning
+}
+
+func (ro *Room) updateRegister(client *Client) {
+	ro.join <- client
 	return
 }
 
