@@ -2,7 +2,7 @@
 	<head>
 		<link rel="stylesheet" href="/static/css/style.css" />
 		
-		<title>Sala: {{.}}</title>
+		<title>Sala: {{.roomName}}</title>
 	</head>
 	<body>
 		<div id="messages"></div>
@@ -14,7 +14,7 @@
 	<script>
 		
 
-		const socket = new WebSocket("ws://localhost:8080/ws?id={{.}}");
+		const socket = new WebSocket("ws://localhost:8080/ws?id={{.id}}");
 		const form = document.getElementById("form");
 		const input = document.getElementById("input");
 		const messages = document.getElementById("messages");
@@ -28,7 +28,7 @@
 			var obj = {
 				Username: user,
 				Message: input.value, 
-				RoomId: "{{.}}"
+				RoomId: "{{.id}}"
 			};
 
 

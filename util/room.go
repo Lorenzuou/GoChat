@@ -27,6 +27,7 @@ func CreateClient(conn *websocket.Conn) *Client {
 
 func (c *Client) Leave(room *Room) {
 	room.leave <- c
+	c.conn.Close()
 }
 
 func (c *Client) GetConn() *websocket.Conn {
@@ -36,6 +37,10 @@ func (c *Client) GetConn() *websocket.Conn {
 // Room represents a chat room
 type Room struct {
 	id string
+
+	roomName string
+
+	roomDescription string
 
 	// Registered clients.
 	clients map[*Client]bool
@@ -73,16 +78,18 @@ func GetRoomById(id string) *Room {
 }
 
 // NewRoom creates a new room
-func CreateRoom() *Room {
+func CreateRoom(roomName string, roomDescription string) *Room {
 	id := len(rmms) + 1
 
 	r := &Room{
-		id:        fmt.Sprintf("%d", id),
-		broadcast: make(chan *Message),
-		join:      make(chan *Client),
-		leave:     make(chan *Client),
-		clients:   make(map[*Client]bool),
-		isrunning: false,
+		id:              fmt.Sprintf("%d", id),
+		roomName:        roomName,
+		roomDescription: roomDescription,
+		broadcast:       make(chan *Message),
+		join:            make(chan *Client),
+		leave:           make(chan *Client),
+		clients:         make(map[*Client]bool),
+		isrunning:       false,
 	}
 	rmms[r.id] = r
 	return r
@@ -132,4 +139,21 @@ func (ro *Room) updateRegister(client *Client) {
 
 func (ro *Room) GetId() string {
 	return ro.id
+}
+
+func (ro *Room) GetName() string {
+	return ro.roomName
+}
+
+func (ro *Room) GetDescription() string {
+	return ro.roomDescription
+}
+
+//a interface for the room atributes
+func (ro *Room) GetRoomInterface() map[string]interface{} {
+	return map[string]interface{}{
+		"id":          ro.id,
+		"roomName":    ro.roomName,
+		"description": ro.roomDescription,
+	}
 }

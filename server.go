@@ -36,14 +36,22 @@ func roomsPage(w http.ResponseWriter, r *http.Request) {
 
 	roomsIds := rm.GetRomsIds()
 
+	roomsInterfaces := make([]interface{}, len(roomsIds))
+	for i, id := range roomsIds {
+		roomsInterfaces[i] = rm.GetRoomById(id).GetRoomInterface()
+	}
+
 	t, _ := template.ParseFiles("public/rooms.gohtml")
-	t.Execute(w, roomsIds)
+	t.Execute(w, roomsInterfaces)
 
 }
 
 func createRoom(w http.ResponseWriter, r *http.Request) {
+	// get post data
+	roomName := r.FormValue("name")
+	roomDescription := r.FormValue("description")
 
-	room := rm.CreateRoom()
+	room := rm.CreateRoom(roomName, roomDescription)
 	fmt.Println("room id: ", room.GetId())
 	//send client to room with id as query param
 	http.Redirect(w, r, "/room?id="+room.GetId(), http.StatusSeeOther)
@@ -57,8 +65,10 @@ func roomPage(w http.ResponseWriter, r *http.Request, params map[string]string) 
 		http.Redirect(w, r, "/rooms", http.StatusSeeOther)
 	} else {
 
+		roomMap := rm.GetRoomById(id).GetRoomInterface()
+
 		t, _ := template.ParseFiles("public/room.gohtml")
-		t.Execute(w, id)
+		t.Execute(w, roomMap)
 	}
 
 }
