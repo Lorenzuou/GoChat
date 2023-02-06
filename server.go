@@ -14,6 +14,7 @@ import (
 // this function maps routes to functions
 func mapRoutes() {
 	mux["/"] = homePage
+	mux["/register"] = register
 	mux["/rooms"] = roomsPage
 	mux["/createRoom"] = createRoom
 }
@@ -26,13 +27,63 @@ func mapRoutesWithParams() {
 
 var rooms = rm.GetRooms()
 
-func homePage(w http.ResponseWriter, r *http.Request) {
-	t, _ := template.ParseFiles("public/index.html")
-	t.Execute(w, nil)
+var users = map[string]string{
+	"1": "1",
+	"user2": "password2",
+}
 
+var isAuthenticated = false
+
+func homePage(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "GET" {
+		tmpl, err := template.ParseFiles("templates/login.gohtml")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		tmpl.Execute(w, nil)
+	} else {
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+
+		if p, ok := users[username]; ok && p == password {
+			// Autenticação bem-sucedida, redirecionar para a página protegida
+			isAuthenticated = true
+			http.Redirect(w, r, "/rooms", http.StatusFound)
+			return
+		}
+
+		// Autenticação falhou, exibir uma mensagem de erro
+		fmt.Fprintln(w, "Usuário ou senha inválidos")
+		return
+	}
+}
+
+func register(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		tmpl, err := template.ParseFiles("templates/register.gohtml")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		tmpl.Execute(w, nil)
+	} else {
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+
+		users[username] = password
+
+		http.Redirect(w, r, "/", http.StatusFound)
+	}
 }
 
 func roomsPage(w http.ResponseWriter, r *http.Request) {
+
+	if !isAuthenticated {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
 
 	roomsIds := rm.GetRomsIds()
 
@@ -41,12 +92,17 @@ func roomsPage(w http.ResponseWriter, r *http.Request) {
 		roomsInterfaces[i] = rm.GetRoomById(id).GetRoomInterface()
 	}
 
-	t, _ := template.ParseFiles("public/rooms.gohtml")
+	t, _ := template.ParseFiles("templates/rooms.gohtml")
 	t.Execute(w, roomsInterfaces)
 
 }
 
 func createRoom(w http.ResponseWriter, r *http.Request) {
+	if !isAuthenticated {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
 	// get post data
 	roomName := r.FormValue("name")
 	roomDescription := r.FormValue("description")
@@ -60,6 +116,11 @@ func createRoom(w http.ResponseWriter, r *http.Request) {
 
 func roomPage(w http.ResponseWriter, r *http.Request, params map[string]string) {
 
+	if !isAuthenticated {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
 	id := params["id"]
 	if rm.GetRoomById(id) == nil {
 		http.Redirect(w, r, "/rooms", http.StatusSeeOther)
@@ -67,7 +128,7 @@ func roomPage(w http.ResponseWriter, r *http.Request, params map[string]string) 
 
 		roomMap := rm.GetRoomById(id).GetRoomInterface()
 
-		t, _ := template.ParseFiles("public/room.gohtml")
+		t, _ := template.ParseFiles("templates/room.gohtml")
 		t.Execute(w, roomMap)
 	}
 
@@ -102,7 +163,7 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	fs := http.FileServer(http.Dir("public"))
+	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	mux = make(map[string]func(http.ResponseWriter, *http.Request))
