@@ -1,3 +1,13 @@
+
+# Webchat Golang
+
+Este projeto é uma aplicação de webchat feito em Golang que permite ao usuário criar salas e conversar com outros usuários que entrarem nas salas. A aplicação utiliza conexão WebSocket para a comunicação entre os clientes e o servidor. O projeto foi desenvolvido como parte de uma disciplina da universidade.
+
+Um dos diferenciais desta aplicação é o uso de programação concorrente em Golang, que facilita o desenvolvimento de programas que podem executar várias tarefas ao mesmo tempo, aproveitando melhor os recursos do processador e aumentando a performance do sistema. A programação concorrente em Golang é baseada no conceito de goroutines e canais, que são abstrações que permitem criar e sincronizar processos leves sem a necessidade de lidar com threads ou locks diretamente.
+
+
+
+
 Alunos : 
 
 Lorenzo M. Scaramussa - 2020100706
